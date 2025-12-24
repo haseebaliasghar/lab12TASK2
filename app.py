@@ -1,3 +1,20 @@
+import sys
+import pandas as pd
+import numpy as np
+import sklearn
+import matplotlib
+import seaborn
+import streamlit as st
+
+st.write("Python version:", sys.version)
+st.write("Pandas version:", pd.__version__)
+st.write("NumPy version:", np.__version__)
+st.write("Sklearn version:", sklearn.__version__)
+st.write("Matplotlib version:", matplotlib.__version__)
+st.write("Seaborn version:", seaborn.__version__)
+st.write("Streamlit version:", st.__version__)
+
+
 import streamlit as st
 import pandas as pd
 import numpy as np
