@@ -1,28 +1,19 @@
-# ==========================================================
-# STREAMLIT APP: LOAN APPROVAL PREDICTION
-# Task 2 Random Forest Model
-# Compatible with:
-# Pandas 2.2.3, Numpy 1.26.4, Sklearn 1.3.0, Streamlit 1.52.0
-# ==========================================================
-
 import streamlit as st
 import pandas as pd
 import numpy as np
 import pickle
+import sklearn  # IMPORTANT: ensures pickle can find scikit-learn classes
 
-# -------------------- PAGE CONFIG --------------------
-st.set_page_config(
-    page_title="Loan Approval Prediction",
-    page_icon="💰",
-    layout="centered"
-)
-
+# ================== APP TITLE ==================
+st.set_page_config(page_title="Loan Approval Prediction", page_icon="💰")
 st.title("💰 Loan Approval Prediction App")
 st.write("Enter applicant details to predict loan approval status using a trained Random Forest model.")
 
-# -------------------- LOAD MODEL & ENCODERS --------------------
+# ================== LOAD MODEL ==================
 @st.cache_data
 def load_model():
+    # Explicitly import sklearn here to avoid pickle errors
+    import sklearn
     with open("random_forest_loan_approval_model.pkl", "rb") as f:
         model = pickle.load(f)
     with open("loan_label_encoders.pkl", "rb") as f:
@@ -31,49 +22,58 @@ def load_model():
 
 rf_model, label_encoders = load_model()
 
-# -------------------- USER INPUTS --------------------
-st.header("Applicant Information")
+# ================== USER INPUT ==================
+st.sidebar.header("Applicant Details")
 
-no_of_dependents = st.number_input("Number of Dependents", min_value=0, max_value=20, value=0)
-education = st.selectbox("Education", options=["Graduate", "Not Graduate"])
-self_employed = st.selectbox("Self Employed?", options=["Yes", "No"])
-income_annum = st.number_input("Annual Income (in ₹)", min_value=0, step=100000, value=5000000)
-loan_amount = st.number_input("Loan Amount (in ₹)", min_value=0, step=100000, value=1000000)
-loan_term = st.number_input("Loan Term (in Years)", min_value=1, max_value=30, value=10)
-cibil_score = st.number_input("CIBIL Score", min_value=300, max_value=900, value=750)
-residential_assets_value = st.number_input("Residential Assets Value (in ₹)", min_value=0, step=100000, value=1000000)
-commercial_assets_value = st.number_input("Commercial Assets Value (in ₹)", min_value=0, step=100000, value=1000000)
-luxury_assets_value = st.number_input("Luxury Assets Value (in ₹)", min_value=0, step=100000, value=500000)
-bank_asset_value = st.number_input("Bank Asset Value (in ₹)", min_value=0, step=100000, value=2000000)
+def user_input():
+    input_data = {}
+    for feature in rf_model.feature_names_in_:
+        if feature in label_encoders:
+            # Categorical input
+            options = list(label_encoders[feature].classes_)
+            input_data[feature] = st.sidebar.selectbox(f"{feature}:", options)
+        else:
+            # Numerical input
+            input_data[feature] = st.sidebar.number_input(f"{feature}:", value=0)
+    return pd.DataFrame([input_data])
 
-# -------------------- PREPARE INPUT FOR MODEL --------------------
-input_data = pd.DataFrame({
-    "no_of_dependents": [no_of_dependents],
-    "education": [education],
-    "self_employed": [self_employed],
-    "income_annum": [income_annum],
-    "loan_amount": [loan_amount],
-    "loan_term": [loan_term],
-    "cibil_score": [cibil_score],
-    "residential_assets_value": [residential_assets_value],
-    "commercial_assets_value": [commercial_assets_value],
-    "luxury_assets_value": [luxury_assets_value],
-    "bank_asset_value": [bank_asset_value]
+input_df = user_input()
+
+# ================== ENCODE CATEGORICALS ==================
+for col in input_df.columns:
+    if col in label_encoders:
+        le = label_encoders[col]
+        input_df[col] = le.transform(input_df[col])
+
+# ================== PREDICTION ==================
+prediction = rf_model.predict(input_df)[0]
+prediction_prob = rf_model.predict_proba(input_df)[0]
+
+# ================== DISPLAY RESULTS ==================
+st.subheader("Prediction")
+if prediction == 1:
+    st.success("✅ Loan Approved")
+else:
+    st.error("❌ Loan Not Approved")
+
+st.subheader("Prediction Probabilities")
+prob_df = pd.DataFrame({
+    "Status": label_encoders['loan_status'].classes_,
+    "Probability": prediction_prob
 })
+st.dataframe(prob_df)
 
-# Encode categorical columns
-for col in ["education", "self_employed"]:
-    le = label_encoders[col]
-    input_data[col] = le.transform(input_data[col])
+# ================== FEATURE IMPORTANCE ==================
+st.subheader("Feature Importance")
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-# -------------------- PREDICTION --------------------
-if st.button("Predict Loan Approval"):
-    prediction = rf_model.predict(input_data)[0]
-    prediction_proba = rf_model.predict_proba(input_data)[0]
+importances = rf_model.feature_importances_
+features = rf_model.feature_names_in_
 
-    st.subheader("Prediction Result:")
-    st.success(f"The loan is likely to be **{prediction}**.")
-
-    st.subheader("Prediction Probabilities:")
-    for cls, prob in zip(rf_model.classes_, prediction_proba):
-        st.write(f"{cls}: {prob*100:.2f}%")
+fig, ax = plt.subplots(figsize=(8,5))
+sns.barplot(x=importances, y=features, ax=ax, palette="Purples")
+ax.set_title("Random Forest Feature Importance")
+ax.set_xlabel("Importance")
+ax.set_ylabel("Feature")
+st.pyplot(fig)
